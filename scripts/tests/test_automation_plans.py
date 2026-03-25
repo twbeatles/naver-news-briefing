@@ -15,17 +15,29 @@ def test_parse_monitoring_interval_plan():
     assert plan.schedule.kind == "interval"
     assert plan.schedule.interval_minutes == 60
     assert plan.primary_query == "반도체"
+    assert plan.template == "watch-alert"
+    assert plan.operator_hints.storage_target == "watch"
     assert any("watch-add" in cmd for cmd in plan.suggested_commands)
 
 
 def test_parse_daily_briefing_group_plan():
-    plan = parse_automation_request("반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘")
+    plan = parse_automation_request("매일 아침 7시에 반도체, AI 데이터센터 뉴스 브리핑해줘")
     assert plan.action == "briefing"
     assert plan.query_mode == "group"
     assert plan.schedule.kind == "daily"
     assert plan.schedule.time == "07:00"
     assert len(plan.queries) == 2
+    assert plan.template == "morning-briefing"
     assert any("group-add" in cmd for cmd in plan.suggested_commands)
+
+
+def test_parse_exclude_and_continuous_watch_plan():
+    plan = parse_automation_request("증권사 리포트 빼고 삼성전자 뉴스 계속 체크해줘")
+    assert plan.action == "monitor"
+    assert plan.primary_query == "삼성전자 -증권사 -리포트"
+    assert plan.schedule.kind == "interval"
+    assert plan.schedule.interval_minutes == 15
+    assert plan.watch_intent == "continuous"
 
 
 def test_cmd_plan_json(capsys):
@@ -34,36 +46,31 @@ def test_cmd_plan_json(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["schedule"]["interval_minutes"] == 60
     assert payload["primary_query"] == "반도체"
+    assert payload["operator_hints"]["storage_target"] == "watch"
 
 
 def test_cmd_plan_save_creates_watch(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "add_rule", lambda **kwargs: {"name": kwargs["name"], "search_query": kwargs["search_query"]})
-    args = DummyArgs(
-        request="반도체 뉴스 1시간마다 모니터링해줘",
-        name="semi-hourly",
-        as_type="watch",
-        label=None,
-        tag=None,
-        json=True,
-    )
+    monkeypatch.setattr(cli, "add_rule", lambda **kwargs: {"name": kwargs["name"], "search_query": kwargs["search_query"], "template": kwargs["template"], "tags": kwargs["tags"], "schedule": kwargs["schedule"]})
+    args = DummyArgs(request="반도체 뉴스 1시간마다 모니터링해줘", name="semi-hourly", as_type="watch", label=None, tag=None, json=True)
     assert cli.cmd_plan_save(args) == 0
     payload = json.loads(capsys.readouterr().out)
+    value = payload["created"][0]["value"]
     assert payload["created"][0]["type"] == "watch"
-    assert payload["created"][0]["value"]["name"] == "semi-hourly"
+    assert value["name"] == "semi-hourly"
+    assert value["template"] == "watch-alert"
+    assert "interval" in value["tags"]
+    assert value["schedule"]["interval_minutes"] == 60
 
 
 def test_cmd_plan_save_creates_group(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "create_group", lambda **kwargs: {"name": kwargs["name"], "queries": kwargs["queries"]})
-    args = DummyArgs(
-        request="반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘",
-        name="morning-tech",
-        as_type="group",
-        label="아침 브리핑",
-        tag=["테크"],
-        json=True,
-    )
+    monkeypatch.setattr(cli, "create_group", lambda **kwargs: {"name": kwargs["name"], "queries": kwargs["queries"], "template": kwargs["template"], "schedule": kwargs["schedule"], "operator_hints": kwargs["operator_hints"]})
+    args = DummyArgs(request="반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘", name="morning-tech", as_type="group", label="아침 브리핑", tag=["테크"], json=True)
     assert cli.cmd_plan_save(args) == 0
     payload = json.loads(capsys.readouterr().out)
+    value = payload["created"][0]["value"]
     assert payload["created"][0]["type"] == "group"
-    assert payload["created"][0]["value"]["name"] == "morning-tech"
-    assert len(payload["created"][0]["value"]["queries"]) == 2
+    assert value["name"] == "morning-tech"
+    assert len(value["queries"]) == 2
+    assert value["template"] == "morning-briefing"
+    assert value["schedule"]["time"] == "07:00"
+    assert value["operator_hints"]["storage_target"] == "group"

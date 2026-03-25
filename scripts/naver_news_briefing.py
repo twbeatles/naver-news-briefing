@@ -51,10 +51,27 @@ def _print_payload(payload: Any, *, as_json: bool, render_text=None) -> None:
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
-        if render_text is None:
-            print(payload)
-        else:
-            print(render_text(payload))
+        print(render_text(payload) if render_text else payload)
+
+
+def _format_watch_text(rule: Dict[str, Any]) -> str:
+    extra = []
+    if rule.get("days"):
+        extra.append(f"최근 {rule['days']}일")
+    if rule.get("exclude_words"):
+        extra.append("제외=" + ", ".join(rule["exclude_words"]))
+    if rule.get("template"):
+        extra.append(f"template={rule['template']}")
+    if rule.get("schedule", {}).get("label"):
+        extra.append(f"schedule={rule['schedule']['label']}")
+    lines = [f"- {rule['name']}: {rule['raw_query']}" + (f" ({'; '.join(extra)})" if extra else "")]
+    if rule.get("label"):
+        lines.append(f"  label: {rule['label']}")
+    if rule.get("tags"):
+        lines.append("  tags: " + ", ".join(rule["tags"]))
+    if rule.get("context"):
+        lines.append(f"  context: {rule['context']}")
+    return "\n".join(lines)
 
 
 def cmd_setup(args: argparse.Namespace) -> int:
@@ -66,12 +83,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
 def cmd_check_credentials(args: argparse.Namespace) -> int:
     client_id, client_secret, timeout, _ = get_runtime_credentials()
     ok = bool(client_id and client_secret)
-    payload = {
-        "configured": ok,
-        "client_id_present": bool(client_id),
-        "client_secret_present": bool(client_secret),
-        "timeout": timeout,
-    }
+    payload = {"configured": ok, "client_id_present": bool(client_id), "client_secret_present": bool(client_secret), "timeout": timeout}
     print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else ("OK" if ok else "MISSING"))
     return 0 if ok else 1
 
@@ -79,20 +91,8 @@ def cmd_check_credentials(args: argparse.Namespace) -> int:
 def run_search(query: str, *, limit: int, days: int | None, as_json: bool) -> int:
     intent = build_intent(query, limit=limit, days=days)
     client_id, client_secret, timeout, _ = get_runtime_credentials()
-    result = fetch_news(
-        client_id=client_id,
-        client_secret=client_secret,
-        search_query=intent.search_query,
-        exclude_words=intent.exclude_words,
-        limit=intent.limit,
-        days=intent.days,
-        timeout=timeout,
-    )
-    result["intent"] = {
-        "db_keyword": intent.db_keyword,
-        "fetch_key": intent.fetch_key,
-        "raw_query": intent.raw_query,
-    }
+    result = fetch_news(client_id=client_id, client_secret=client_secret, search_query=intent.search_query, exclude_words=intent.exclude_words, limit=intent.limit, days=intent.days, timeout=timeout)
+    result["intent"] = {"db_keyword": intent.db_keyword, "fetch_key": intent.fetch_key, "raw_query": intent.raw_query}
     if as_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
@@ -115,8 +115,12 @@ def cmd_watch_add(args: argparse.Namespace) -> int:
         fetch_key=intent.fetch_key,
         days=intent.days,
         limit=intent.limit,
+        label=args.label,
+        tags=args.tag,
+        context=args.context,
+        template=args.template,
     )
-    print(json.dumps(rule, ensure_ascii=False, indent=2) if args.json else f"등록 완료: {rule['name']} -> {rule['raw_query']}")
+    _print_payload(rule, as_json=args.json, render_text=_format_watch_text)
     return 0
 
 
@@ -128,14 +132,7 @@ def cmd_watch_list(args: argparse.Namespace) -> int:
     if not rules:
         print("등록된 watch rule이 없습니다.")
         return 0
-    for rule in rules:
-        extra = []
-        if rule.get("days"):
-            extra.append(f"최근 {rule['days']}일")
-        if rule.get("exclude_words"):
-            extra.append("제외=" + ", ".join(rule["exclude_words"]))
-        extra_txt = f" ({'; '.join(extra)})" if extra else ""
-        print(f"- {rule['name']}: {rule['raw_query']}{extra_txt}")
+    print("\n\n".join(_format_watch_text(rule) for rule in rules))
     return 0
 
 
@@ -150,15 +147,7 @@ def cmd_watch_remove(args: argparse.Namespace) -> int:
 
 def _run_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     client_id, client_secret, timeout, _ = get_runtime_credentials()
-    result = fetch_news(
-        client_id=client_id,
-        client_secret=client_secret,
-        search_query=rule["search_query"],
-        exclude_words=rule["exclude_words"],
-        limit=rule["limit"],
-        days=rule.get("days"),
-        timeout=timeout,
-    )
+    result = fetch_news(client_id=client_id, client_secret=client_secret, search_query=rule["search_query"], exclude_words=rule["exclude_words"], limit=rule["limit"], days=rule.get("days"), timeout=timeout)
     new_items = mark_seen(rule["id"], result["items"])
     return {
         "rule": rule,
@@ -209,6 +198,10 @@ def _format_group_text(group: Dict[str, Any]) -> str:
         lines.append(f"  label: {group['label']}")
     if group.get("tags"):
         lines.append("  tags: " + ", ".join(group["tags"]))
+    if group.get("template"):
+        lines.append(f"  template: {group['template']}")
+    if group.get("schedule", {}).get("label"):
+        lines.append(f"  schedule: {group['schedule']['label']}")
     if group.get("context"):
         lines.append(f"  context: {group['context']}")
     for idx, query in enumerate(group.get("queries", []), start=1):
@@ -217,7 +210,7 @@ def _format_group_text(group: Dict[str, Any]) -> str:
 
 
 def cmd_group_add(args: argparse.Namespace) -> int:
-    group = create_group(name=args.name, queries=args.query, label=args.label, tags=args.tag, context=args.context)
+    group = create_group(name=args.name, queries=args.query, label=args.label, tags=args.tag, context=args.context, template=args.template)
     _print_payload(group, as_json=args.json, render_text=_format_group_text)
     return 0
 
@@ -247,15 +240,7 @@ def cmd_group_update(args: argparse.Namespace) -> int:
     tags = None
     if args.tag is not None or args.clear_tags:
         tags = [] if args.clear_tags else args.tag
-    group = update_group(
-        args.name_or_id,
-        label=args.label,
-        context=args.context,
-        tags=tags,
-        replace_queries=args.set_query,
-        add_queries=args.add_query,
-        remove_queries=args.remove_query,
-    )
+    group = update_group(args.name_or_id, label=args.label, context=args.context, tags=tags, template=args.template, replace_queries=args.set_query, add_queries=args.add_query, remove_queries=args.remove_query)
     _print_payload(group, as_json=args.json, render_text=_format_group_text)
     return 0
 
@@ -263,20 +248,8 @@ def cmd_group_update(args: argparse.Namespace) -> int:
 def _run_query_entry(query: str, *, limit: int, days: int | None, group: Dict[str, Any] | None = None, label: str | None = None, context: str | None = None) -> Dict[str, Any]:
     intent = build_intent(query, limit=limit, days=days)
     client_id, client_secret, timeout, _ = get_runtime_credentials()
-    result = fetch_news(
-        client_id=client_id,
-        client_secret=client_secret,
-        search_query=intent.search_query,
-        exclude_words=intent.exclude_words,
-        limit=intent.limit,
-        days=intent.days,
-        timeout=timeout,
-    )
-    result["intent"] = {
-        "db_keyword": intent.db_keyword,
-        "fetch_key": intent.fetch_key,
-        "raw_query": intent.raw_query,
-    }
+    result = fetch_news(client_id=client_id, client_secret=client_secret, search_query=intent.search_query, exclude_words=intent.exclude_words, limit=intent.limit, days=intent.days, timeout=timeout)
+    result["intent"] = {"db_keyword": intent.db_keyword, "fetch_key": intent.fetch_key, "raw_query": intent.raw_query}
     return {
         "query": query,
         "search_query": intent.search_query,
@@ -293,16 +266,19 @@ def _run_query_entry(query: str, *, limit: int, days: int | None, group: Dict[st
 def cmd_brief_multi(args: argparse.Namespace) -> int:
     entries: List[Dict[str, Any]] = []
     groups: List[Dict[str, Any]] = []
+    template = args.template
     for group_name in args.group or []:
         group = get_group(group_name)
         groups.append(group)
+        if not args.template and group.get("template"):
+            template = group["template"]
         for query in group["queries"]:
             entries.append(_run_query_entry(query, limit=args.limit, days=args.days, group=group))
     for query in args.query or []:
         entries.append(_run_query_entry(query, limit=args.limit, days=args.days))
     if not entries:
         raise ValueError("brief-multi에는 --query 또는 --group이 최소 1개 이상 필요합니다.")
-    payload = build_combined_payload(entries, template=args.template, source_groups=groups)
+    payload = build_combined_payload(entries, template=template, source_groups=groups)
     if args.json:
         print(render_combined_json(payload))
     else:
@@ -320,11 +296,28 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
     plan = parse_automation_request(args.request)
     created: Dict[str, Any] = {"plan": plan_to_dict(plan), "created": []}
     name = args.name or plan.name_hint
+    label = args.label or ("아침 브리핑" if plan.template == "morning-briefing" else None)
+    tags = list(args.tag or [])
+    if plan.schedule.kind != "manual":
+        tags.append(plan.schedule.kind)
+    if plan.watch_intent != "none":
+        tags.append("watch")
+    if plan.query_mode == "group":
+        tags.append("group")
     if not plan.queries:
         raise ValueError("저장 가능한 주제 키워드를 찾지 못했습니다. 요청에 관심 주제를 포함해 주세요.")
 
     if args.as_type == "group" or plan.query_mode == "group":
-        group = create_group(name=name, queries=plan.queries, label=args.label, tags=args.tag, context=plan.raw_request)
+        group = create_group(
+            name=name,
+            queries=plan.queries,
+            label=label,
+            tags=tags,
+            context=plan.raw_request,
+            template=plan.template,
+            schedule=plan_to_dict(plan)["schedule"],
+            operator_hints=plan_to_dict(plan)["operator_hints"],
+        )
         created["created"].append({"type": "group", "value": group})
     else:
         intent = build_intent(plan.primary_query or plan.queries[0])
@@ -337,6 +330,12 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
             fetch_key=intent.fetch_key,
             days=intent.days,
             limit=intent.limit,
+            label=label,
+            tags=tags,
+            context=plan.raw_request,
+            template=plan.template,
+            schedule=plan_to_dict(plan)["schedule"],
+            operator_hints=plan_to_dict(plan)["operator_hints"],
         )
         created["created"].append({"type": "watch", "value": rule})
 
@@ -370,6 +369,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("query")
     p.add_argument("--limit", type=int, default=10)
     p.add_argument("--days", type=int)
+    p.add_argument("--label")
+    p.add_argument("--tag", action="append")
+    p.add_argument("--context")
+    p.add_argument("--template", choices=supported_templates())
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_watch_add)
 
@@ -392,6 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--label")
     p.add_argument("--tag", action="append")
     p.add_argument("--context")
+    p.add_argument("--template", choices=supported_templates())
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_group_add)
 
@@ -408,6 +412,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("name_or_id")
     p.add_argument("--label")
     p.add_argument("--context")
+    p.add_argument("--template", choices=supported_templates())
     p.add_argument("--tag", action="append")
     p.add_argument("--clear-tags", action="store_true")
     p.add_argument("--set-query", action="append")
@@ -421,7 +426,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--group", action="append")
     p.add_argument("--limit", type=int, default=5)
     p.add_argument("--days", type=int)
-    p.add_argument("--template", choices=supported_templates(), default="concise")
+    p.add_argument("--template", choices=supported_templates())
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_brief_multi)
 
