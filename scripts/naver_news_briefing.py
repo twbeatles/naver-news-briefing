@@ -21,6 +21,18 @@ from query_utils import build_intent
 from watch_store import add_rule, get_rule, list_rules, mark_seen, remove_rule
 
 
+def _unique_preserve_order(values: List[str]) -> List[str]:
+    seen = set()
+    unique: List[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        unique.append(text)
+    return unique
+
+
 def _brief_lines(result: Dict[str, Any], *, title: str | None = None) -> List[str]:
     lines: List[str] = []
     heading = title or f"네이버 뉴스 브리핑: {result['query']}"
@@ -306,7 +318,9 @@ def cmd_integration_plan(args: argparse.Namespace) -> int:
         assistant_channel=args.channel,
     )
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as fp:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", encoding="utf-8") as fp:
             json.dump(bundle, fp, ensure_ascii=False, indent=2)
     _print_payload(bundle, as_json=args.json, render_text=render_integration_bundle_text)
     return 0
@@ -314,7 +328,8 @@ def cmd_integration_plan(args: argparse.Namespace) -> int:
 
 def cmd_plan_save(args: argparse.Namespace) -> int:
     plan = parse_automation_request(args.request)
-    created: Dict[str, Any] = {"plan": plan_to_dict(plan), "created": []}
+    plan_payload = plan_to_dict(plan)
+    created: Dict[str, Any] = {"plan": plan_payload, "created": []}
     name = args.name or plan.name_hint
     label = args.label or ("아침 브리핑" if plan.template == "morning-briefing" else None)
     tags = list(args.tag or [])
@@ -324,6 +339,7 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
         tags.append("watch")
     if plan.query_mode == "group":
         tags.append("group")
+    tags = _unique_preserve_order(tags)
     if not plan.queries:
         raise ValueError("저장 가능한 주제 키워드를 찾지 못했습니다. 요청에 관심 주제를 포함해 주세요.")
 
@@ -335,8 +351,8 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
             tags=tags,
             context=plan.raw_request,
             template=plan.template,
-            schedule=plan_to_dict(plan)["schedule"],
-            operator_hints=plan_to_dict(plan)["operator_hints"],
+            schedule=plan_payload["schedule"],
+            operator_hints=plan_payload["operator_hints"],
         )
         created["created"].append({"type": "group", "value": group})
     else:
@@ -354,8 +370,8 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
             tags=tags,
             context=plan.raw_request,
             template=plan.template,
-            schedule=plan_to_dict(plan)["schedule"],
-            operator_hints=plan_to_dict(plan)["operator_hints"],
+            schedule=plan_payload["schedule"],
+            operator_hints=plan_payload["operator_hints"],
         )
         created["created"].append({"type": "watch", "value": rule})
 
