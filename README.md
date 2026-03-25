@@ -1,179 +1,230 @@
 # naver-news-briefing
 
-네이버 Search API 기반으로 **뉴스 검색 / 브리핑 / 지속 감시 / 키워드 그룹 / 멀티 브리핑**을 수행하는 OpenClaw 스킬입니다.
+네이버 Search API 기반으로 **뉴스 검색 / 브리핑 / 지속 감시 / 키워드 그룹 / 자동화 계획 생성**을 수행하는 OpenClaw 스킬입니다.
 
-이 스킬은 GUI 앱이 아니라 **채팅형 자동화**에 맞춰 설계되어 있습니다. 즉, 한 번 검색하고 끝내는 용도뿐 아니라:
-- 특정 주제를 계속 감시하고
-- 새 기사만 추려서 보고하고
-- 여러 주제를 한 번에 묶어 아침 브리핑을 만들고
-- cron/메시징 레이어에 연결해 자동으로 알려주는
-흐름에 최적화되어 있습니다.
+이 스킬의 핵심은 단순 검색이 아니라 **채팅형 한국어 요청을 실제 운영 가능한 로컬 설정으로 연결**하는 데 있습니다.
+예를 들어 아래 같은 요청을 바로 다룰 수 있습니다.
+
+- `반도체 뉴스 1시간마다 모니터링해줘`
+- `매일 아침 7시에 브리핑해줘`
+- `반도체랑 AI 데이터센터 뉴스 묶어서 아침 브리핑용으로 저장해줘`
+- `삼성전자 뉴스에서 증권사 리포트 말고 최근 일주일 핵심만 알려줘`
+
+직접 cron을 건드리지는 않지만, **cron/메시징 레이어가 바로 붙을 수 있는 structured plan + watch/group 설정**까지 만들어 주는 것이 이번 레이어의 목적입니다.
 
 ## 핵심 기능
 
-- 한국어 자연어 질의 기반 뉴스 검색
-- `-제외어` 기반 필터링
+- 한국어 자연어 뉴스 검색
+- `-제외어` 필터링
 - 최근 기간 해석
-  - `오늘`
-  - `최근 3일`
-  - `최근 2주`
-  - `한달`
-  - `이번주`
-  - `지난주`
+  - `오늘`, `최근 3일`, `최근 2주`, `한달`, `이번주`, `지난주`
 - 문장형 한국어 요청 정규화
-  - 예: `삼성전자 관련해서 증권사 리포트 말고 최근 일주일 핵심만 알려줘`
 - 원샷 브리핑
-- watch rule 저장/목록/삭제/체크
-- 키워드 그룹 저장/관리
-- 여러 질의를 묶은 멀티 브리핑
-- 템플릿 지원
+- watch rule 저장 / 목록 / 삭제 / 신규 기사 체크
+- 키워드 그룹 저장 / 수정 / 삭제
+- 멀티 브리핑 템플릿
   - `concise`
   - `analyst`
   - `morning-briefing`
   - `watch-alert`
-- chat-friendly text / machine-friendly JSON 출력
-- Windows DPAPI 기반 자격증명 저장 패턴
+- **자연어 자동화 계획 파싱**
+  - interval / daily / weekly / manual 분류
+  - cron 힌트 출력
+  - 추천 CLI 명령 생성
+- **plan-save로 watch/group 저장**
+- 기본 텍스트 출력 + `--json` 구조화 출력
 
-## 이 스킬이 잘 맞는 요청 예시
+## 빠른 시작
 
-- `최근 3일 반도체 뉴스 브리핑해줘`
-- `삼성전자 뉴스에서 증권사 리포트 말고 최근 일주일 핵심만 보고 싶어`
-- `AI 데이터센터 뉴스 계속 감시해줘`
-- `반도체, 환율, 2차전지 뉴스 묶어서 아침 브리핑 만들어줘`
-- `새 기사만 1시간마다 체크해서 알려주는 파이프라인 만들고 싶어`
-
-## 설치
-
-### ClawHub로 설치
-
-```bash
-clawhub install naver-news-briefing
-```
-
-### 로컬에서 바로 사용
-
-```bash
-python scripts/naver_news_briefing.py --help
-```
-
-## 사전 준비
-
-네이버 개발자센터에서 Search API 자격증명을 발급받아야 합니다.
+### 1) 자격증명 저장
 
 ```bash
 python scripts/naver_news_briefing.py setup --client-id YOUR_ID --client-secret YOUR_SECRET
 python scripts/naver_news_briefing.py check-credentials --json
 ```
 
-## 빠른 시작
-
-### 1) 원샷 뉴스 브리핑
+### 2) 원샷 브리핑
 
 ```bash
 python scripts/naver_news_briefing.py search "최근 3일 반도체 뉴스 브리핑 -광고"
 ```
 
-### 2) JSON 출력
+### 3) 자연어 자동화 계획 확인
 
 ```bash
-python scripts/naver_news_briefing.py search "삼성전자 관련해서 증권사 리포트 말고 최근 일주일 핵심만 알려줘" --json
+python scripts/naver_news_briefing.py plan "반도체 뉴스 1시간마다 모니터링해줘"
+python scripts/naver_news_briefing.py plan "반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘" --json
 ```
 
-### 3) watch rule 추가
+### 4) 계획을 실제 설정으로 저장
+
+watch로 저장:
+
+```bash
+python scripts/naver_news_briefing.py plan-save "반도체 뉴스 1시간마다 모니터링해줘" --as watch --name semiconductor-hourly
+```
+
+group으로 저장:
+
+```bash
+python scripts/naver_news_briefing.py plan-save \
+  "반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘" \
+  --as group \
+  --name morning-tech \
+  --label "아침 브리핑" \
+  --tag 테크 \
+  --tag 시장
+```
+
+## 운영 패턴
+
+### 패턴 1) 새 기사 감시형
+
+요청:
+
+- `반도체 뉴스 1시간마다 모니터링해줘`
+
+추천 흐름:
+
+1. `plan`으로 스케줄/질의 해석 확인
+2. `plan-save --as watch`로 watch 저장
+3. 외부 스케줄러에서 `watch-check <name> --json` 주기 실행
+4. 새 기사만 텔레그램/디스코드로 전달
+
+예:
+
+```bash
+python scripts/naver_news_briefing.py plan "반도체 뉴스 1시간마다 모니터링해줘"
+python scripts/naver_news_briefing.py plan-save "반도체 뉴스 1시간마다 모니터링해줘" --as watch --name semiconductor-hourly
+python scripts/naver_news_briefing.py watch-check semiconductor-hourly --json
+```
+
+### 패턴 2) 아침 브리핑형
+
+요청:
+
+- `반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘`
+
+추천 흐름:
+
+1. `plan`으로 daily schedule / group 해석 확인
+2. `plan-save --as group`으로 질의 묶음 저장
+3. 외부 스케줄러에서 `brief-multi --group <name> --template morning-briefing` 실행
+4. 출력 텍스트를 메시징 채널로 전송
+
+예:
+
+```bash
+python scripts/naver_news_briefing.py plan-save \
+  "반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘" \
+  --as group --name morning-tech --label "아침 브리핑"
+
+python scripts/naver_news_briefing.py brief-multi --group morning-tech --template morning-briefing
+```
+
+### 패턴 3) 제외어 포함 실무형 질의
+
+```bash
+python scripts/naver_news_briefing.py search "삼성전자 관련해서 증권사 리포트 말고 최근 일주일 핵심만 알려줘"
+```
+
+이 경우 내부적으로:
+
+- `삼성전자`를 핵심 검색어로 정리하고
+- `증권사`, `리포트`는 제외어로 유지하고
+- `최근 일주일`은 기간 조건으로 해석합니다.
+
+## CLI 개요
+
+### search
+
+```bash
+python scripts/naver_news_briefing.py search "최근 3일 반도체 뉴스 브리핑 -광고"
+python scripts/naver_news_briefing.py search "AI 데이터센터 뉴스" --json
+```
+
+### watch
 
 ```bash
 python scripts/naver_news_briefing.py watch-add semiconductor "최근 7일 반도체 -광고"
+python scripts/naver_news_briefing.py watch-list
+python scripts/naver_news_briefing.py watch-check semiconductor --json
+python scripts/naver_news_briefing.py watch-remove semiconductor
 ```
 
-### 4) watch 점검
+### group
 
 ```bash
-python scripts/naver_news_briefing.py watch-check
-python scripts/naver_news_briefing.py watch-check --json
-```
-
-## 키워드 그룹
-
-반복적으로 함께 보는 주제들을 하나의 그룹으로 저장할 수 있습니다.
-
-### 그룹 추가
-
-```bash
-python scripts/naver_news_briefing.py group-add market-watch \
-  "최근 3일 반도체 -광고" \
-  "오늘 AI 데이터센터 -주가" \
-  --label "아침 시장" \
-  --tag 테크 \
-  --tag 모니터링 \
-  --context "오전 보고용"
-```
-
-### 그룹 목록
-
-```bash
+python scripts/naver_news_briefing.py group-add market-watch "최근 3일 반도체 -광고" "오늘 AI 데이터센터 -주가" --label "시장 체크"
 python scripts/naver_news_briefing.py group-list
-python scripts/naver_news_briefing.py group-list market-watch --json
-```
-
-### 그룹 수정
-
-```bash
-python scripts/naver_news_briefing.py group-update market-watch --add-query "배터리 공급망 -광고" --tag 공급망
-```
-
-### 그룹 삭제
-
-```bash
+python scripts/naver_news_briefing.py group-update market-watch --add-query "배터리 공급망 -광고"
 python scripts/naver_news_briefing.py group-remove market-watch
 ```
 
-## 멀티 브리핑
-
-여러 질의나 그룹을 묶어서 한 번에 브리핑할 수 있습니다.
-
-### 그룹 기반 브리핑
+### brief-multi
 
 ```bash
 python scripts/naver_news_briefing.py brief-multi --group market-watch --template concise
+python scripts/naver_news_briefing.py brief-multi --group market-watch --query "환율 뉴스" --template morning-briefing --json
 ```
 
-### 그룹 + 직접 질의 혼합
+### plan / plan-save
 
 ```bash
-python scripts/naver_news_briefing.py brief-multi \
-  --group market-watch \
-  --query "환율 뉴스 브리핑" \
-  --template morning-briefing --json
+python scripts/naver_news_briefing.py plan "반도체 뉴스 1시간마다 모니터링해줘"
+python scripts/naver_news_briefing.py plan-save "반도체 뉴스 1시간마다 모니터링해줘" --as watch --name semiconductor-hourly
 ```
 
-## 출력 모드
+`plan` 출력에는 보통 다음이 들어갑니다.
 
-- 기본: 사람이 읽기 쉬운 한국어 브리핑 텍스트
-- `--json`: 자동화/상위 레이어 연동용 구조화 출력
+- 작업 유형: monitor / briefing / monitor+briefing
+- 해석된 질의 목록
+- 일정 종류: interval / daily / weekly / manual
+- cron 힌트
+- 추천 템플릿
+- 추천 후속 명령
 
-이 구조 덕분에 OpenClaw cron, Telegram, Discord, 다른 브리핑 워크플로우에 바로 붙이기 쉽습니다.
+## 운영자 가이드
 
-## 자연어 처리 범위
+### 1) watch와 group을 구분해서 생각하기
 
-현재는 **검색 친화형 한국어 자연어**에 최적화되어 있습니다.
+- **watch**: 단일 관심 주제를 새 기사 기준으로 계속 체크할 때 적합
+- **group**: 여러 주제를 묶어 반복 브리핑할 때 적합
 
-잘 되는 입력 예시:
-- `최근 3일 반도체 뉴스 브리핑 -광고`
-- `삼성전자 관련해서 최근 일주일 핵심 뉴스만 브리핑해줘`
-- `삼성전자 관련해서 증권사 리포트 말고 최근 일주일 핵심만 알려줘`
-- `AI 데이터센터 뉴스 중에 주가 얘기 빼고 이번주만`
+### 2) 스케줄은 외부에서, 상태는 이 스킬에서
 
-가장 안정적인 형식은:
+이 스킬은:
+
+- 질의 정규화
+- 상태 저장
+- 중복 제거
+- 브리핑 렌더링
+
+을 담당합니다.
+
+정확한 실행 시각은 OpenClaw cron, Windows 작업 스케줄러, GitHub Actions, 별도 워커 등 외부에서 연결하는 구조가 가장 깔끔합니다.
+
+### 3) 가장 안정적인 질의 형식
+
+자연어도 되지만 아래 형식이 가장 예측 가능하게 동작합니다.
+
 - 기간 표현 + 핵심 키워드 + 제외어
 
 예:
+
 - `최근 7일 반도체 공급망 -광고 -주가`
+- `오늘 AI 데이터센터 -리포트`
+
+### 4) dedupe 동작
+
+watch-check는 `(watch_id, link)` 기준으로 신규 여부를 판정합니다.
+즉 같은 기사 링크는 반복 실행돼도 재알림하지 않습니다.
 
 ## 저장 파일
 
 - `data/config.json`: API 자격증명 및 기본 설정
-- `data/watch_state.db`: watch/group 상태 저장
-- `references/upstream-notes.md`: upstream 앱에서 어떤 개념을 가져왔는지 정리한 메모
+- `data/watch_state.db`: watch / group / seen-link 상태
+- `references/upstream-notes.md`: upstream 설계 메모
 
 ## 테스트
 
@@ -183,17 +234,7 @@ python -m pytest scripts/tests -q
 
 ## 한계
 
-- 기사 **본문 크롤링/본문 요약**은 하지 않습니다.
-- 네이버 Search API가 제공하는 **제목 / 요약 / 링크 / 발행시각** 메타데이터를 기반으로 브리핑합니다.
-- 자연어 처리는 실용형 정규화 수준이며, 완전 자유 대화형 intent parser는 아닙니다.
-- watch dedupe는 `(watch_id, link)` 기준이라 기사 링크가 같으면 재알림하지 않습니다.
-
-## 왜 이 스킬이 유용한가
-
-기존 GUI형 뉴스 수집/관리 앱의 핵심 개념을 가져오되, OpenClaw에서 바로 쓰기 좋게 바꿨습니다.
-즉, **검색 도구**가 아니라:
-- 자동 브리핑 엔진
-- 뉴스 감시 엔진
-- 주제 그룹 관리 도구
-- cron 친화형 텍스트/JSON 출력기
-로 쓰는 쪽에 더 가깝습니다.
+- 기사 본문 크롤링/본문 요약은 하지 않습니다.
+- 네이버 Search API의 제목 / 요약 / 링크 / 발행시각 메타데이터 기반으로 동작합니다.
+- 자연어 일정 파서는 실무형 요청 위주입니다. 아주 자유로운 대화 문맥 추론까지 하지는 않습니다.
+- `매일 아침 7시에 브리핑해줘`처럼 **주제 없이 일정만 있는 요청**은 계획은 일부 만들 수 있어도 저장 가능한 watch/search 명령은 제한될 수 있습니다.

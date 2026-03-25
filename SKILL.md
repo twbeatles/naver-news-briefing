@@ -25,11 +25,14 @@ Use the CLI script at `scripts/naver_news_briefing.py`.
    - Group briefing: `python scripts/naver_news_briefing.py brief-multi --group market-watch --template concise`
    - Mixed briefing: `python scripts/naver_news_briefing.py brief-multi --group market-watch --query "환율 뉴스 브리핑" --template morning-briefing --json`
    - Templates: `concise`, `analyst`, `morning-briefing`, `watch-alert`
-5. Manage persistent watch rules.
+5. Convert chat-style automation requests into structured plans.
+   - Inspect plan: `python scripts/naver_news_briefing.py plan "반도체 뉴스 1시간마다 모니터링해줘" --json`
+   - Save derived watch/group config: `python scripts/naver_news_briefing.py plan-save "반도체, AI 데이터센터 뉴스 매일 아침 7시에 브리핑해줘" --as group --name morning-tech --label "아침 브리핑"`
+6. Manage persistent watch rules.
    - Add: `python scripts/naver_news_briefing.py watch-add semiconductor "최근 7일 반도체 -광고"`
    - List: `python scripts/naver_news_briefing.py watch-list`
    - Remove: `python scripts/naver_news_briefing.py watch-remove semiconductor`
-6. Run watch checks for cron / automation.
+7. Run watch checks for cron / automation.
    - All rules: `python scripts/naver_news_briefing.py watch-check`
    - One rule: `python scripts/naver_news_briefing.py watch-check semiconductor --json`
 
@@ -42,6 +45,8 @@ Use the CLI script at `scripts/naver_news_briefing.py`.
 - Use DPAPI-backed secret storage on Windows when possible.
 - Deduplicate watch notifications by `(watch_id, link)` so repeated cron runs emit only newly seen items.
 - Persist keyword groups with ordered queries plus optional `label`, `tags`, and `context` metadata so the same set can be reused across briefing and monitoring workflows.
+- `plan` parses chat-style Korean automation requests into a structured schedule + query plan, including cron hints and suggested follow-up CLI commands.
+- `plan-save` materializes a parsed plan into a saved `watch` or `group` configuration without owning cron wiring itself.
 - `brief-multi` returns chat-friendly combined text by default and structured JSON with `--json`.
 
 ## Notes

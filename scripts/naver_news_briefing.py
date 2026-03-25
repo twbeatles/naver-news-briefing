@@ -5,6 +5,7 @@ import json
 import sys
 from typing import Any, Dict, List
 
+from automation_plans import parse_automation_request, plan_to_dict, render_plan_text
 from briefing_templates import build_combined_payload, render_combined_json, render_combined_text, supported_templates
 from config_store import get_runtime_credentials, set_credentials
 from group_store import create_group, get_group, list_groups, remove_group, update_group
@@ -309,6 +310,40 @@ def cmd_brief_multi(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_plan(args: argparse.Namespace) -> int:
+    plan = parse_automation_request(args.request)
+    _print_payload(plan_to_dict(plan), as_json=args.json, render_text=lambda _: render_plan_text(plan))
+    return 0
+
+
+def cmd_plan_save(args: argparse.Namespace) -> int:
+    plan = parse_automation_request(args.request)
+    created: Dict[str, Any] = {"plan": plan_to_dict(plan), "created": []}
+    name = args.name or plan.name_hint
+    if not plan.queries:
+        raise ValueError("저장 가능한 주제 키워드를 찾지 못했습니다. 요청에 관심 주제를 포함해 주세요.")
+
+    if args.as_type == "group" or plan.query_mode == "group":
+        group = create_group(name=name, queries=plan.queries, label=args.label, tags=args.tag, context=plan.raw_request)
+        created["created"].append({"type": "group", "value": group})
+    else:
+        intent = build_intent(plan.primary_query or plan.queries[0])
+        rule = add_rule(
+            name=name,
+            raw_query=intent.raw_query,
+            search_query=intent.search_query,
+            db_keyword=intent.db_keyword,
+            exclude_words=intent.exclude_words,
+            fetch_key=intent.fetch_key,
+            days=intent.days,
+            limit=intent.limit,
+        )
+        created["created"].append({"type": "watch", "value": rule})
+
+    _print_payload(created, as_json=args.json, render_text=lambda payload: render_plan_text(plan) + "\n- 저장 결과:\n" + "\n".join(f"  - {item['type']}: {item['value']['name']}" for item in payload['created']))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Naver news briefing skill CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -389,6 +424,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--template", choices=supported_templates(), default="concise")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_brief_multi)
+
+    p = sub.add_parser("plan", help="채팅형 자연어 요청을 자동화 계획으로 변환")
+    p.add_argument("request")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_plan)
+
+    p = sub.add_parser("plan-save", help="자연어 요청을 해석해 watch/group 설정으로 저장")
+    p.add_argument("request")
+    p.add_argument("--name")
+    p.add_argument("--as", dest="as_type", choices=["watch", "group"])
+    p.add_argument("--label")
+    p.add_argument("--tag", action="append")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_plan_save)
 
     return parser
 
