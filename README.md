@@ -11,6 +11,20 @@
 
 이 스킬은 이를 **정규화된 질의 + 저장 가능한 watch/group 설정 + cron 연결 힌트 + 추천 실행 명령**으로 바꿉니다.
 
+## 설치 / 링크
+
+- GitHub: <https://github.com/twbeatles/openclaw-naver-news-briefing>
+- ClawHub 홈: <https://clawhub.com>
+- 설치 명령: `clawhub install naver-news-briefing`
+
+## 대표 예시 요청 모음
+
+- `최근 3일 반도체 뉴스 브리핑해줘`
+- `반도체 뉴스 1시간마다 모니터링해줘`
+- `매일 아침 7시에 반도체랑 AI 데이터센터 뉴스 브리핑해줘`
+- `증권사 리포트 빼고 삼성전자 뉴스 계속 체크해줘`
+- `환율이랑 2차전지 뉴스 묶어서 아침 브리핑용 그룹 만들어줘`
+
 ---
 
 ## 핵심 기능
