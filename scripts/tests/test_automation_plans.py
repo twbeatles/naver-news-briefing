@@ -1,7 +1,7 @@
 import json
 
 import naver_news_briefing as cli
-from automation_plans import parse_automation_request
+from automation_plans import build_integration_bundle, parse_automation_request
 
 
 class DummyArgs:
@@ -60,6 +60,41 @@ def test_cmd_plan_save_creates_watch(monkeypatch, capsys):
     assert value["template"] == "watch-alert"
     assert "interval" in value["tags"]
     assert value["schedule"]["interval_minutes"] == 60
+
+
+def test_build_integration_bundle_for_watch(tmp_path):
+    skill_dir = tmp_path / "skills" / "naver-news-briefing"
+    skill_dir.mkdir(parents=True)
+    bundle = build_integration_bundle(
+        "반도체 뉴스 1시간마다 모니터링해줘",
+        skill_dir=skill_dir,
+        assistant_channel="telegram",
+    )
+    assert bundle["storage"]["target"] == "watch"
+    assert bundle["storage"]["name"] == "반도체-watch"
+    assert "plan-save" in bundle["storage"]["save_command"]
+    assert "watch-check 반도체-watch --json" in bundle["runner"]["command"]
+    assert bundle["automation"]["schedule"]["cron"] == "0 */1 * * *"
+    assert bundle["automation"]["cron_line"].startswith("0 */1 * * * cd ")
+    assert "telegram 채널" in bundle["automation"]["system_event_text"]
+
+
+def test_cmd_integration_plan_json(tmp_path, capsys):
+    skill_dir = tmp_path / "skills" / "naver-news-briefing"
+    skill_dir.mkdir(parents=True)
+    args = DummyArgs(
+        request="매일 아침 7시에 반도체랑 AI 데이터센터 뉴스 브리핑해줘",
+        channel="telegram",
+        skill_dir=str(skill_dir),
+        output=None,
+        json=True,
+    )
+    assert cli.cmd_integration_plan(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["storage"]["target"] == "group"
+    assert payload["plan"]["schedule"]["time"] == "07:00"
+    assert "brief-multi --group" in payload["runner"]["command"]
+    assert payload["automation"]["schedule"]["cron"] == "0 7 * * *"
 
 
 def test_cmd_plan_save_creates_group(monkeypatch, capsys):

@@ -32,6 +32,7 @@ Use the CLI script at `scripts/naver_news_briefing.py`.
    - If `--template` is omitted, prefer the saved group template when present.
 6. Convert chat-style automation requests into structured plans.
    - Inspect plan: `python scripts/naver_news_briefing.py plan "반도체 뉴스 1시간마다 모니터링해줘" --json`
+   - Build an OpenClaw-friendly integration bundle: `python scripts/naver_news_briefing.py integration-plan "반도체 뉴스 1시간마다 모니터링해줘" --json`
    - Support practical Korean patterns such as `매일 아침 7시에 반도체랑 AI 데이터센터 뉴스 브리핑해줘` and `증권사 리포트 빼고 삼성전자 뉴스 계속 체크해줘`.
 7. Materialize plans into persistent configs.
    - Watch: `python scripts/naver_news_briefing.py plan-save "반도체 뉴스 1시간마다 모니터링해줘" --as watch --name semiconductor-hourly`
@@ -47,6 +48,7 @@ Use the CLI script at `scripts/naver_news_briefing.py`.
 - Use DPAPI-backed secret storage on Windows when possible.
 - Deduplicate watch notifications by `(watch_id, link)` so repeated cron runs emit only newly seen items.
 - `plan` returns cron-friendly operator hints, recommended commands, and a storage-target recommendation (`watch` vs `group`).
+- `integration-plan` returns a more practical operator bundle: save command, run command, schedule object, cron line, OpenClaw-friendly systemEvent text, and a Korean confirmation summary.
 - `plan-save` materializes a parsed plan into a saved `watch` or `group` configuration without owning cron wiring itself.
 - `brief-multi` returns chat-friendly combined text by default and structured JSON with `--json`.
 

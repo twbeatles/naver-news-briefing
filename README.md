@@ -65,7 +65,24 @@ python scripts/naver_news_briefing.py plan "매일 아침 7시에 반도체랑 A
 python scripts/naver_news_briefing.py plan "증권사 리포트 빼고 삼성전자 뉴스 계속 체크해줘"
 ```
 
-### 4) 계획을 실제 설정으로 저장
+### 4) OpenClaw/cron 연동 번들 생성
+
+```bash
+python scripts/naver_news_briefing.py integration-plan "반도체 뉴스 1시간마다 모니터링해줘"
+python scripts/naver_news_briefing.py integration-plan "매일 아침 7시에 반도체랑 AI 데이터센터 뉴스 브리핑해줘" --json
+python scripts/naver_news_briefing.py integration-plan "반도체 뉴스 1시간마다 모니터링해줘" --output data/semiconductor-hourly-bundle.json --json
+```
+
+이 명령은 한 번에 아래를 만듭니다.
+
+- 해석된 자동화 계획
+- 실제 저장 명령 (`plan-save`)
+- 반복 실행 명령 (`watch-check` 또는 `brief-multi`)
+- cron 한 줄 예시
+- OpenClaw cron/systemEvent에 붙이기 좋은 텍스트
+- 사용자 확인용 짧은 한국어 문구
+
+### 5) 계획을 실제 설정으로 저장
 
 watch로 저장:
 
@@ -179,13 +196,25 @@ python scripts/naver_news_briefing.py brief-multi --group market-watch --query "
 - `--template`를 주지 않으면 group에 저장된 template를 우선 사용합니다.
 - 운영자가 template를 group 단위로 고정해 두면 cron 명령이 짧아집니다.
 
-### plan / plan-save
+### plan / integration-plan / plan-save
 
 ```bash
 python scripts/naver_news_briefing.py plan "반도체 뉴스 1시간마다 모니터링해줘"
-python scripts/naver_news_briefing.py plan "매일 아침 7시에 반도체랑 AI 데이터센터 뉴스 브리핑해줘" --json
+python scripts/naver_news_briefing.py integration-plan "매일 아침 7시에 반도체랑 AI 데이터센터 뉴스 브리핑해줘" --json
 python scripts/naver_news_briefing.py plan-save "증권사 리포트 빼고 삼성전자 뉴스 계속 체크해줘" --as watch --name samsung-watch
 ```
+
+`integration-plan`은 `plan`보다 한 단계 더 나가서 **실행 가능한 연동 번들**을 만듭니다.
+
+대표 필드:
+
+- `storage.save_command`: 상태 저장용 `plan-save` 명령
+- `runner.command`: 반복 실행용 핵심 명령
+- `automation.schedule`: 스케줄 객체
+- `automation.cron_line`: 바로 복사 가능한 cron 한 줄
+- `automation.system_event_text`: OpenClaw systemEvent 초안
+- `automation.openclaw_prompt`: 작업 생성기에 넘기기 좋은 요약 프롬프트
+- `assistant_summary.confirmation`: 사용자에게 확인받기 좋은 짧은 문장
 
 `plan` 출력에는 보통 다음이 들어갑니다.
 

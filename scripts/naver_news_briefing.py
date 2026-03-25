@@ -3,9 +3,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import Any, Dict, List
 
-from automation_plans import parse_automation_request, plan_to_dict, render_plan_text
+from automation_plans import (
+    build_integration_bundle,
+    parse_automation_request,
+    plan_to_dict,
+    render_integration_bundle_text,
+    render_plan_text,
+)
 from briefing_templates import build_combined_payload, render_combined_json, render_combined_text, supported_templates
 from config_store import get_runtime_credentials, set_credentials
 from group_store import create_group, get_group, list_groups, remove_group, update_group
@@ -292,6 +299,19 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_integration_plan(args: argparse.Namespace) -> int:
+    bundle = build_integration_bundle(
+        args.request,
+        skill_dir=args.skill_dir or str(Path(__file__).resolve().parents[1]),
+        assistant_channel=args.channel,
+    )
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as fp:
+            json.dump(bundle, fp, ensure_ascii=False, indent=2)
+    _print_payload(bundle, as_json=args.json, render_text=render_integration_bundle_text)
+    return 0
+
+
 def cmd_plan_save(args: argparse.Namespace) -> int:
     plan = parse_automation_request(args.request)
     created: Dict[str, Any] = {"plan": plan_to_dict(plan), "created": []}
@@ -434,6 +454,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("request")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_plan)
+
+    p = sub.add_parser("integration-plan", help="자연어 요청을 OpenClaw/cron 연동 번들로 변환")
+    p.add_argument("request")
+    p.add_argument("--channel", default="telegram")
+    p.add_argument("--skill-dir")
+    p.add_argument("--output")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_integration_plan)
 
     p = sub.add_parser("plan-save", help="자연어 요청을 해석해 watch/group 설정으로 저장")
     p.add_argument("request")
