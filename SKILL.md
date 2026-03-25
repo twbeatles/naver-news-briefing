@@ -7,9 +7,19 @@ description: Search, brief, and monitor 대한민국 Naver News via the Naver Se
 
 Use the CLI script at `scripts/naver_news_briefing.py`.
 
+## Onboarding
+
+- Treat Naver Search API credentials as mandatory before the first real use.
+- Tell the user early that search/briefing/watch flows will fail until `client_id` and `client_secret` are stored.
+- If the user has not completed setup yet, direct them to run:
+  - `python scripts/naver_news_briefing.py setup --client-id ... --client-secret ...`
+  - `python scripts/naver_news_briefing.py check-credentials --json`
+- Present setup as the first-run path, not an optional advanced step.
+- When helping with installation or first use, mention that credentials are stored in `data/config.json` and use DPAPI-backed secret storage on Windows when possible.
+
 ## Workflow
 
-1. Store credentials once.
+1. Store credentials once before any search/brief/watch command.
    - `python scripts/naver_news_briefing.py setup --client-id ... --client-secret ...`
    - Verify with `python scripts/naver_news_briefing.py check-credentials --json`
 2. Run a one-shot briefing.

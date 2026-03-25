@@ -1,6 +1,10 @@
 # naver-news-briefing
 
-**OpenClaw용 네이버 뉴스 자동화 스킬**로, 네이버 Search API 기반의 뉴스 검색 / 브리핑 / 지속 감시 / 키워드 그룹 / 자동화 계획 생성을 수행합니다.
+네이버 Search API 기반으로 **뉴스 검색 / 브리핑 / 지속 감시 / 키워드 그룹 / 자동화 계획 생성**을 수행하는 OpenClaw 스킬입니다.
+
+> [!IMPORTANT]
+> 이 스킬은 **네이버 개발자센터에서 발급받은 Search API 자격증명(client_id, client_secret)이 있어야만 정상 동작**합니다.
+> 설치만으로 바로 검색되지는 않으며, **최초 1회 자격증명 입력(onboarding/setup)** 을 반드시 거쳐야 합니다.
 
 이 스킬의 핵심은 단순 검색이 아니라 **채팅형 한국어 요청을 실제 운영 가능한 로컬 설정으로 연결**하는 데 있습니다.
 즉, 사람이 이렇게 말하면:
@@ -58,12 +62,28 @@
 
 ## 빠른 시작
 
-### 1) 자격증명 저장
+### 0) 먼저 준비할 것
+
+이 스킬을 처음 쓰는 사용자는 먼저 아래를 준비해야 합니다.
+
+- 네이버 개발자센터에서 발급받은 `client_id`
+- 네이버 개발자센터에서 발급받은 `client_secret`
+
+자격증명이 없으면 `search`, `watch-add`, `watch-check`, `brief-multi`, `plan-save` 같은 실제 운영 명령은 정상적으로 끝까지 진행되지 않습니다.
+
+### 1) 최초 온보딩: 자격증명 저장
 
 ```bash
 python scripts/naver_news_briefing.py setup --client-id YOUR_ID --client-secret YOUR_SECRET
 python scripts/naver_news_briefing.py check-credentials --json
 ```
+
+설명:
+
+- `setup`은 최초 1회 실행하는 온보딩 명령입니다.
+- 자격증명은 `data/config.json`에 저장됩니다.
+- Windows에서는 가능하면 DPAPI 기반으로 `client_secret`를 보호합니다.
+- `check-credentials --json`으로 첫 입력이 제대로 끝났는지 바로 검증하세요.
 
 ### 2) 원샷 브리핑
 
@@ -299,6 +319,25 @@ python scripts/naver_news_briefing.py watch-check samsung-watch --json
 ```
 
 ---
+
+## 온보딩 / 최초 사용 가이드
+
+처음 설치한 사용자는 아래 순서로 시작하면 됩니다.
+
+1. 네이버 Search API 자격증명(`client_id`, `client_secret`)을 준비합니다.
+2. `setup` 명령으로 최초 입력을 완료합니다.
+3. `check-credentials --json`으로 유효성을 확인합니다.
+4. 그 다음에만 `search` 또는 `plan`/`plan-save` 흐름으로 넘어갑니다.
+
+가장 안전한 첫 실행 순서:
+
+```bash
+python scripts/naver_news_briefing.py setup --client-id YOUR_ID --client-secret YOUR_SECRET
+python scripts/naver_news_briefing.py check-credentials --json
+python scripts/naver_news_briefing.py search "최근 3일 반도체 뉴스 브리핑"
+```
+
+만약 자격증명이 설정되지 않았다면, 다른 명령을 먼저 시도하기보다 **다시 온보딩(setup)부터 안내하는 쪽이 맞습니다.**
 
 ## 운영자 가이드
 
