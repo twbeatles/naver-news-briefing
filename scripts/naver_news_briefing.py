@@ -21,42 +21,7 @@ from query_utils import build_intent
 from watch_store import add_rule, get_rule, list_rules, mark_seen, remove_rule
 
 
-def _unique_preserve_order(values: List[str]) -> List[str]:
-    seen = set()
-    unique: List[str] = []
-    for value in values:
-        text = str(value or "").strip()
-        if not text or text in seen:
-            continue
-        seen.add(text)
-        unique.append(text)
-    return unique
-
-
-def _format_missing_reference(kind: str, name_or_id: Any, available_names: List[str] | None = None) -> str:
-    value = str(name_or_id).strip()
-    lines = [f"등록된 {kind}을(를) 찾지 못했습니다: {value}"]
-    if available_names:
-        preview = ", ".join(available_names[:5])
-        lines.append(f"현재 등록된 {kind}: {preview}")
-    lines.append(f"먼저 {kind} 목록을 확인해 주세요.")
-    return " ".join(lines)
-
-
-def _resolve_watch_rule(name_or_id: Any) -> Dict[str, Any]:
-    try:
-        return get_rule(name_or_id)
-    except KeyError as exc:
-        rules = list_rules()
-        raise ValueError(_format_missing_reference("watch rule", name_or_id, [rule["name"] for rule in rules])) from exc
-
-
-def _resolve_group(name_or_id: Any) -> Dict[str, Any]:
-    try:
-        return get_group(name_or_id)
-    except KeyError as exc:
-        groups = list_groups()
-        raise ValueError(_format_missing_reference("키워드 그룹", name_or_id, [group["name"] for group in groups])) from exc
+MISSING_CREDENTIALS_ERROR = "네이버 API 자격증명이 설정되지 않았습니다."
 
 
 def _brief_lines(result: Dict[str, Any], *, title: str | None = None) -> List[str]:
@@ -131,6 +96,29 @@ def cmd_check_credentials(args: argparse.Namespace) -> int:
     payload = {"configured": ok, "client_id_present": bool(client_id), "client_secret_present": bool(client_secret), "timeout": timeout}
     print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else ("OK" if ok else "MISSING"))
     return 0 if ok else 1
+
+
+def _render_missing_credentials_guidance() -> str:
+    return "\n".join(
+        [
+            "네이버 Search API 자격증명이 아직 설정되지 않았습니다.",
+            "먼저 최초 온보딩(setup)을 완료해 주세요.",
+            "",
+            "실행 순서:",
+            "1) python scripts/naver_news_briefing.py setup --client-id YOUR_ID --client-secret YOUR_SECRET",
+            "2) python scripts/naver_news_briefing.py check-credentials --json",
+            "3) 그 다음 search / watch / brief-multi / plan-save 명령을 실행",
+            "",
+            "참고: 자격증명은 data/config.json 에 저장되며 Windows에서는 가능하면 DPAPI로 보호합니다.",
+        ]
+    )
+
+
+def _format_exception_message(exc: Exception) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    if MISSING_CREDENTIALS_ERROR in message:
+        return _render_missing_credentials_guidance()
+    return f"ERROR: {message}"
 
 
 def run_search(query: str, *, limit: int, days: int | None, as_json: bool) -> int:
@@ -210,7 +198,7 @@ def _run_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def cmd_watch_check(args: argparse.Namespace) -> int:
-    targets = [_resolve_watch_rule(args.name_or_id)] if args.name_or_id else list_rules()
+    targets = [get_rule(args.name_or_id)] if args.name_or_id else list_rules()
     payload = [_run_rule(rule) for rule in targets]
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -261,7 +249,7 @@ def cmd_group_add(args: argparse.Namespace) -> int:
 
 
 def cmd_group_list(args: argparse.Namespace) -> int:
-    groups = [_resolve_group(args.name_or_id)] if args.name_or_id else list_groups()
+    groups = [get_group(args.name_or_id)] if args.name_or_id else list_groups()
     if args.json:
         print(json.dumps(groups if not args.name_or_id else groups[0], ensure_ascii=False, indent=2))
         return 0
@@ -285,7 +273,6 @@ def cmd_group_update(args: argparse.Namespace) -> int:
     tags = None
     if args.tag is not None or args.clear_tags:
         tags = [] if args.clear_tags else args.tag
-    _resolve_group(args.name_or_id)
     group = update_group(args.name_or_id, label=args.label, context=args.context, tags=tags, template=args.template, replace_queries=args.set_query, add_queries=args.add_query, remove_queries=args.remove_query)
     _print_payload(group, as_json=args.json, render_text=_format_group_text)
     return 0
@@ -314,7 +301,7 @@ def cmd_brief_multi(args: argparse.Namespace) -> int:
     groups: List[Dict[str, Any]] = []
     template = args.template
     for group_name in args.group or []:
-        group = _resolve_group(group_name)
+        group = get_group(group_name)
         groups.append(group)
         if not args.template and group.get("template"):
             template = group["template"]
@@ -345,9 +332,7 @@ def cmd_integration_plan(args: argparse.Namespace) -> int:
         assistant_channel=args.channel,
     )
     if args.output:
-        output_path = Path(args.output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("w", encoding="utf-8") as fp:
+        with open(args.output, "w", encoding="utf-8") as fp:
             json.dump(bundle, fp, ensure_ascii=False, indent=2)
     _print_payload(bundle, as_json=args.json, render_text=render_integration_bundle_text)
     return 0
@@ -355,8 +340,7 @@ def cmd_integration_plan(args: argparse.Namespace) -> int:
 
 def cmd_plan_save(args: argparse.Namespace) -> int:
     plan = parse_automation_request(args.request)
-    plan_payload = plan_to_dict(plan)
-    created: Dict[str, Any] = {"plan": plan_payload, "created": []}
+    created: Dict[str, Any] = {"plan": plan_to_dict(plan), "created": []}
     name = args.name or plan.name_hint
     label = args.label or ("아침 브리핑" if plan.template == "morning-briefing" else None)
     tags = list(args.tag or [])
@@ -366,11 +350,8 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
         tags.append("watch")
     if plan.query_mode == "group":
         tags.append("group")
-    tags = _unique_preserve_order(tags)
     if not plan.queries:
         raise ValueError("저장 가능한 주제 키워드를 찾지 못했습니다. 요청에 관심 주제를 포함해 주세요.")
-    if args.as_type == "watch" and plan.query_mode == "group":
-        raise ValueError("여러 주제가 감지되어 watch 하나로 저장할 수 없습니다. --as group으로 저장하거나 요청을 한 주제로 좁혀 주세요.")
 
     if args.as_type == "group" or plan.query_mode == "group":
         group = create_group(
@@ -380,8 +361,8 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
             tags=tags,
             context=plan.raw_request,
             template=plan.template,
-            schedule=plan_payload["schedule"],
-            operator_hints=plan_payload["operator_hints"],
+            schedule=plan_to_dict(plan)["schedule"],
+            operator_hints=plan_to_dict(plan)["operator_hints"],
         )
         created["created"].append({"type": "group", "value": group})
     else:
@@ -399,8 +380,8 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
             tags=tags,
             context=plan.raw_request,
             template=plan.template,
-            schedule=plan_payload["schedule"],
-            operator_hints=plan_payload["operator_hints"],
+            schedule=plan_to_dict(plan)["schedule"],
+            operator_hints=plan_to_dict(plan)["operator_hints"],
         )
         created["created"].append({"type": "watch", "value": rule})
 
@@ -526,7 +507,7 @@ def main(argv: List[str] | None = None) -> int:
     try:
         return args.func(args)
     except Exception as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        print(_format_exception_message(exc), file=sys.stderr)
         return 1
 
 
