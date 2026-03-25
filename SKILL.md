@@ -36,7 +36,8 @@ Use the CLI script at `scripts/naver_news_briefing.py`.
 ## Behavior
 
 - Parse positive keywords and `-제외어` using the upstream tab-search policy.
-- Interpret recent-news phrases such as `오늘`, `최근 3일`, `이번주` as a date window and remove that phrase from the API search query.
+- Interpret recent-news phrases such as `오늘`, `최근 3일`, `최근 2주`, `한달`, `이번주`, `지난주` as a date window and remove that phrase from the API search query.
+- Normalize more natural Korean sentence inputs by stripping request phrases, common 조사, duplicate tokens, and Korean exclusion phrases such as `A 말고`, `B 빼고`, `C 제외` into `-제외어` tokens.
 - Store config in `data/config.json` and store watch/group state together in `data/watch_state.db`.
 - Use DPAPI-backed secret storage on Windows when possible.
 - Deduplicate watch notifications by `(watch_id, link)` so repeated cron runs emit only newly seen items.
