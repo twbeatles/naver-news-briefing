@@ -235,10 +235,38 @@ def _render_missing_credentials_guidance() -> str:
     )
 
 
+def _dedupe_preserve_order(values: List[str]) -> List[str]:
+    seen = set()
+    ordered: List[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
+def _format_missing_named_resource(resource_label: str, missing_name: str, available_names: List[str]) -> str:
+    lines = [f"등록된 {resource_label}을(를) 찾지 못했습니다: {missing_name}"]
+    if available_names:
+        lines.append("현재 등록된 항목: " + ", ".join(available_names))
+    else:
+        lines.append("현재 등록된 항목이 없습니다.")
+    return "\n".join(lines)
+
+
 def _format_exception_message(exc: Exception) -> str:
     message = str(exc).strip() or exc.__class__.__name__
     if MISSING_CREDENTIALS_ERROR in message:
         return _render_missing_credentials_guidance()
+    if "keyword group not found:" in message:
+        missing_name = message.split("keyword group not found:", 1)[1].strip().strip("'")
+        available = [group.get("name") for group in list_groups() if group.get("name")]
+        return _format_missing_named_resource("키워드 그룹", missing_name, available)
+    if "watch rule not found:" in message:
+        missing_name = message.split("watch rule not found:", 1)[1].strip().strip("'")
+        available = [rule.get("name") for rule in list_rules() if rule.get("name")]
+        return _format_missing_named_resource("watch rule", missing_name, available)
     return f"ERROR: {message}"
 
 
@@ -475,7 +503,9 @@ def cmd_integration_plan(args: argparse.Namespace) -> int:
         assistant_channel=args.channel,
     )
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as fp:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as fp:
             json.dump(bundle, fp, ensure_ascii=False, indent=2)
     _print_payload(bundle, as_json=args.json, render_text=render_integration_bundle_text)
     return 0
@@ -493,8 +523,12 @@ def cmd_plan_save(args: argparse.Namespace) -> int:
         tags.append("watch")
     if plan.query_mode == "group":
         tags.append("group")
+    tags = _dedupe_preserve_order(tags)
     if not plan.queries:
         raise ValueError("저장 가능한 주제 키워드를 찾지 못했습니다. 요청에 관심 주제를 포함해 주세요.")
+
+    if args.as_type == "watch" and plan.query_mode == "group":
+        raise ValueError("여러 주제를 포함한 그룹형 브리핑 요청입니다. --as group 으로 저장해 주세요.")
 
     if args.as_type == "group" or plan.query_mode == "group":
         group = create_group(
