@@ -4,6 +4,7 @@ import argparse
 import getpass
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -317,6 +318,28 @@ def _run_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _format_watch_status_lines(entry: Dict[str, Any]) -> List[str]:
+    rule = entry["rule"]
+    summary = entry["summary"]
+    items = entry.get("all_items", [])
+    now = datetime.now().strftime("%m월 %d일 %H:%M")
+    query = summary.get("query") or rule.get("search_query") or rule.get("name")
+    current_top_count = len(items)
+    new_count = summary["new_count"]
+    lines = [
+        f"## {rule['name']}",
+        f"- {now} 기준, '{query}' 관련 상위 {current_top_count}건을 확인했고 이번 체크에서 신규 기사 {new_count}건이 추가됐습니다.",
+        f"- 전체 검색 결과: {summary.get('total', 0)}건",
+        f"- 이번 확인 신규 기사: {new_count}건",
+        f"- 현재 검색 상위 기사 수: {current_top_count}건",
+    ]
+    if items:
+        latest_pub = next((item.get("pub_date_iso") or item.get("pub_date") for item in items if item.get("pub_date_iso") or item.get("pub_date")), None)
+        if latest_pub:
+            lines.append(f"- 현재 기준 최신 기사 시각: {latest_pub}")
+    return lines
+
+
 def cmd_watch_check(args: argparse.Namespace) -> int:
     targets = [get_rule(args.name_or_id)] if args.name_or_id else list_rules()
     payload = [_run_rule(rule) for rule in targets]
@@ -329,7 +352,7 @@ def cmd_watch_check(args: argparse.Namespace) -> int:
     lines: List[str] = []
     for entry in payload:
         rule = entry["rule"]
-        lines.append(f"## {rule['name']} ({entry['summary']['new_count']}건 신규)")
+        lines.extend(_format_watch_status_lines(entry))
         lines.extend(_brief_lines({
             "query": rule["search_query"],
             "exclude_words": rule["exclude_words"],
@@ -339,7 +362,7 @@ def cmd_watch_check(args: argparse.Namespace) -> int:
             "filtered_out": entry["summary"]["filtered_out"],
             "too_old": entry["summary"]["too_old"],
             "items": entry["new_items"],
-        }, title=f"watch: {rule['name']}"))
+        }, title=f"watch: {rule['name']} 신규 기사 요약"))
         lines.append("")
     print("\n".join(lines).strip())
     return 0
