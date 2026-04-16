@@ -239,6 +239,38 @@ python scripts/naver_news_briefing.py group-update market-watch --add-query "배
 python scripts/naver_news_briefing.py group-remove market-watch
 ```
 
+## 로컬 설정 / 상태 파일 운영 메모
+
+이 스킬은 실제 운영 시 설정과 상태를 로컬에 저장한다. 보통 아래 파일들을 구분해서 보는 편이 좋다.
+
+- `data/config.json`: API 자격증명 / 기본 설정
+- `data/watch-rules.json`: 저장된 watch rule
+- `data/watch-state.json`: 신규 기사 dedupe 등 점검 상태
+- `data/groups.json`: 저장된 keyword group
+
+권장 원칙:
+- 코드/문서와 사용자 운영 상태를 분리한다.
+- 실제 자격증명이나 운영 중 생성된 상태 파일은 git 추적 대상에 섞지 않는다.
+- 배포/리뷰 전에는 `git status` 로 config/state/debug 파일이 커밋 대상에 끼지 않았는지 먼저 확인한다.
+
+## 운영자 친화 에러 처리 체크포인트
+
+이 스킬은 저장된 이름을 잘못 입력했을 때도 운영자가 바로 수정할 수 있게 힌트를 주는 방향을 목표로 한다.
+
+배포 전 최소 확인 권장:
+
+```bash
+python scripts/naver_news_briefing.py check-credentials --json
+python scripts/naver_news_briefing.py plan "반도체 뉴스 1시간마다 모니터링해줘" --json
+python scripts/naver_news_briefing.py integration-plan "매일 아침 7시에 반도체 뉴스 브리핑해줘" --json
+pytest scripts/tests -q
+```
+
+확인 포인트:
+- 자격증명 누락/오입력 시 에러 메시지가 너무 딱딱하지 않은지
+- 존재하지 않는 watch/group 이름 입력 시 대체 후보 힌트가 유지되는지
+- plan/integration-plan 출력이 실제 cron/operator 흐름에 바로 붙을 정도로 충분한지
+
 ### brief-multi
 
 ```bash
