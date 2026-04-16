@@ -1,4 +1,7 @@
-﻿__pycache__/
+__pycache__/
 *.pyc
 .pytest_cache/
 data/*.db
+data/config.json
+__watch_out.txt
+__watch_stdout.txt
